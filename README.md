@@ -8,6 +8,23 @@ This may occur when communicating with a wireless device (e.g. zwave) as the com
 
 The purpose of this repository is to provide a layer of reliable services that sit on-top of the home assistant services and will automatically retry and alert when the operations fail.
 
+# How does it work
+
+Wrappers are created for exisitng domain service calls (e.g. switch.turn_on)
+The wrapper
+- executes the service call
+- waits for the expected condition to become true with a configurable timeout (e.g. the switch is on)
+- if it timesout it will retry the service call up to 2 more times, while doubling the timeout
+- if it does not succeed a notification can be sent
+
+In addtion for each entity, it tracks the following information
+- # of calls
+- # of retries
+- # of failures
+- datetime of last call
+- duration in ms of the call (wing to wing time - from service call to receiving the state update)
+- status text
+
 # Current State
 
 The first iteration provide a shell script that will generate the reliable service stubs for the entities you identify. The end result is a set of packages and scripts than can be installed as part of your HASS configuration. Long term this will be converted into a custom integration, but for now the ability to quickly and extend by creating HASS scripts will be helpful as we work to understand the different patterns and nuances.
