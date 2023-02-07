@@ -1,0 +1,89 @@
+input_boolean:
+  switch_state:
+  switch_command:
+  fan_state:
+  fan_command:
+
+input_number:
+  current_temperature:
+    min: 0
+    max: 100
+    step: 1
+    mode: box
+  percentage:
+    min: 0
+    max: 100
+    step: 0.1
+    mode: box
+
+switch:
+  - platform: template
+    switches:
+      switch_1:
+        value_template: "{{ is_state('input_boolean.switch_state', 'on') }}"
+        turn_on:
+          service: input_boolean.turn_on
+          target:
+            entity_id: input_boolean.switch_command
+        turn_off:
+          service: input_boolean.turn_off
+          target:
+            entity_id: input_boolean.switch_command
+
+fan:
+  - platform: template
+    fans:
+      fan_1:
+        value_template: "{{ states('input_boolean.fan_state') }}"
+        percentage_template: "{{ states('input_number.percentage') }}"
+        turn_on:
+          service: input_boolean.turn_on
+          target:
+            entity_id: input_boolean.fan_command
+        turn_off:
+          service: input_boolean.turn_off
+          target:
+            entity_id: input_boolean.fan_command
+        set_percentage:
+          service: input_number.set_value
+          target:
+            entity_id: input_number.percentage
+          data:
+            percentage: "{{ percentage }}"
+        speed_count: 3
+
+template:
+  - sensor:
+      - name: "current_temperature"
+        state: "{{ states('input_number.current_temperature') }} "
+
+climate:
+  - platform: generic_thermostat
+    name: thermostat_1
+    heater: switch.switch_1
+    target_sensor: sensor.current_temperature
+    min_temp: 40
+    max_temp: 80
+    ac_mode: false
+    target_temp: 50
+    cold_tolerance: 0.3
+    hot_tolerance: 0
+    min_cycle_duration:
+      seconds: 5
+    keep_alive:
+      minutes: 3
+    initial_hvac_mode: "off"
+    away_temp: 60
+    precision: 1.0
+
+notify:
+  - platform: group
+    name: sms_notifiers_all
+    services: []
+
+recorder:
+  include:
+    entities:
+      - input_boolean.switch_state
+      - input_boolean.switch_command
+      - switch.switch_1

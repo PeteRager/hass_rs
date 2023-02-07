@@ -1,0 +1,30 @@
+# Script to turn a switch on
+# Template Parameters
+# DOMAIN
+# METHOD
+# NAME
+# DATA_TARGET_NAME
+# TIMEOUT
+rs_NAME_DOMAIN_METHOD:
+  description: "reliable NAME DOMAIN METHOD"
+  fields:
+    DATA_TARGET:
+      description: "The DATA_TARGET"
+      example: "x"
+  variables:
+    start_time: "{{ now().timestamp() }}"
+  mode: queued
+  sequence:
+    - service: script.rs_DOMAIN_METHOD
+      continue_on_error: true
+      data_template:
+        entity_id: DOMAIN.NAME
+        target_value: "{{ DATA_TARGET }}"
+        message_id: input_text.rs_DOMAIN_NAME_message
+        retry_count_id: counter.rs_DOMAIN_NAME_retry
+        error_count_id: counter.rs_DOMAIN_NAME_err
+        call_count_id: counter.rs_DOMAIN_NAME_calls
+        timeout_seconds: TIMEOUT
+    - event: rs_call_complete_DOMAIN_NAME
+      event_data:
+        duration: "{{ ((now().timestamp() - start_time)*1000)|round(0) }}"

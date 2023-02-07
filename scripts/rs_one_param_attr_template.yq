@@ -1,0 +1,2 @@
+.rs_DOMAIN_METHOD.fields += {"target_value" : { "description" : "The value for the operation","example":"cool"}} |
+.rs_DOMAIN_METHOD.sequence[1].repeat.sequence[1].data_template += {"DATA_TARGET_NAME": "{{target_value}}"}

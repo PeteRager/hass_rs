@@ -1,0 +1,100 @@
+# Script to turn a switch on
+# Template Parameters
+# DOMAIN
+# METHOD
+# TARGET
+rs_DOMAIN_METHOD:
+  description: "reliable DOMAIN METHOD"
+  fields:
+    entity_id:
+      description: "The DOMAIN entity"
+      example: "DOMAIN.entity_id"
+    message_id:
+      description: "Message Text Destination"
+      example: "input_text.rs_DOMAIN_METHOD_message"
+    retry_count_id:
+      description: "Retry Counter"
+      example: "counter.rs_DOMAIN_METHOD_retry"
+    failed_count_id:
+      description: "Failed Counter"
+      example: "counter.rs_DOMAIN_METHOD_failed"
+    call_count_id:
+      description: "Success Counter"
+      example: "counter.rs_DOMAIN_METHOD_success"
+    timeout_seconds:
+      description: "Default timeout in seconds"
+      example: "5"
+  variables:
+    max_retry: 3
+  mode: parallel
+  sequence:
+    - service: counter.increment
+      continue_on_error: true
+      data_template:
+        entity_id: "{{call_count_id}}"
+    - repeat:
+        sequence:
+          - choose:
+              - conditions: "{{repeat.index == 1}}"
+                sequence:
+                  - service: system_log.write
+                    data:
+                      level: info
+                      message: "METHOD {{entity_id}} MESSAGE_DETAILS- attempt 1"
+                      logger: service
+                  - service: input_text.set_value
+                    data_template:
+                      entity_id: "{{ message_id }}"
+                      value: "METHOD MESSAGE_DETAILS- attempt 1"
+            default:
+              - service: counter.increment
+                continue_on_error: true
+                data_template:
+                  entity_id: "{{retry_count_id}}"
+              - service: system_log.write
+                data:
+                  level: warning
+                  message: "METHOD {{entity_id}} MESSAGE_DETAILS- attempt {{repeat.index}}"
+                  logger: service
+              - service: input_text.set_value
+                data_template:
+                  entity_id: "{{ message_id }}"
+                  value: "METHOD MESSAGE_DETAILS- attempt {{repeat.index}}"
+          - service: DOMAIN.METHOD
+            continue_on_error: true
+            data_template:
+              entity_id: "{{entity_id}}"
+          - wait_template: "{{ COMPARISON_OPERATION }}"
+            timeout:
+              seconds: "{{ timeout_seconds * repeat.index }}"
+            continue_on_timeout: true
+          - if:
+              - "{{wait.completed}}"
+            then:
+              - service: system_log.write
+                data:
+                  level: info
+                  message: "METHOD {{entity_id}} MESSAGE_DETAILS- success"
+                  logger: service
+              - service: input_text.set_value
+                data_template:
+                  entity_id: "{{ message_id }}"
+                  value: "METHOD MESSAGE_DETAILS- success"
+        until: "{{ COMPARISON_OPERATION or repeat.index == max_retry}}"
+    - condition: "{{ not (COMPARISON_OPERATION) }}"
+    - service: system_log.write
+      data:
+        level: error
+        message: "METHOD {{entity_id}} MESSAGE_DETAILS- failed"
+        logger: service
+    - service: input_text.set_value
+      data_template:
+        entity_id: "{{ message_id }}"
+        value: "METHOD MESSAGE_DETAILS- failed"
+    - service: notify.sms_notifiers_all
+      data:
+        message: "METHOD {{entity_id}} MESSAGE_DETAILS- failed"
+    - service: counter.increment
+      continue_on_error: true
+      data_template:
+        entity_id: "{{error_count_id}}"

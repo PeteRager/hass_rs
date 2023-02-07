@@ -1,0 +1,63 @@
+{
+  "version": 1,
+  "minor_version": 1,
+  "key": "lovelace.dashboard_services",
+  "data": {
+    "config": {
+      "views": [
+        {
+          "theme": "Backend-selected",
+          "title": "Overview",
+          "path": "overview",
+          "badges": [],
+          "cards": [
+            {
+              "type": "entity-filter",
+              "entities": [
+              ],
+              "state_filter": [
+                {
+                  "operator": ">",
+                  "value": 0
+                }
+              ],
+              "card": {
+                "type": "entities"
+              }
+            },
+            {
+              "type": "history-graph",
+              "entities": [
+              ],
+              "hours_to_show": 1440
+            }
+          ]
+        },
+        {
+          "theme": "Backend-selected",
+          "title": "Switch",
+          "badges": [],
+          "cards": [
+          ]
+        },
+        {
+          "theme": "Backend-selected",
+          "title": "climate",
+          "path": "climate",
+          "badges": [],
+          "cards": [
+          ]
+        },
+        {
+          "theme": "Backend-selected",
+          "title": "fan",
+          "path": "fan",
+          "badges": [],
+          "cards": [
+          ]
+        }
+
+      ]
+    }
+  }
+}

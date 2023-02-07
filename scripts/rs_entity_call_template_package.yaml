@@ -1,0 +1,34 @@
+# DOMAIN
+# METHOD
+# NAME
+input_text:
+  rs_DOMAIN_NAME_message:
+
+template:
+  - trigger:
+      - platform: event
+        event_type: rs_call_complete_DOMAIN_NAME
+    sensor:
+      - name: "rs_DOMAIN_NAME_duration"
+        unit_of_measurement: ms
+        state: "{{ trigger.event.data.duration }}"
+  - trigger:
+      - platform: event
+        event_type: rs_call_complete_DOMAIN_NAME
+    sensor:
+      - name: "rs_DOMAIN_NAME_last"
+        state: "{{ now().strftime('%Y-%m-%d %H:%M:%S') }}"
+
+counter:
+  rs_DOMAIN_NAME_retry:
+  rs_DOMAIN_NAME_err:
+  rs_DOMAIN_NAME_calls:
+recorder:
+  include:
+    entities:
+      - counter.rs_DOMAIN_NAME_calls
+      - counter.rs_DOMAIN_NAME_retry
+      - counter.rs_DOMAIN_NAME_err
+      - sensor.rs_DOMAIN_NAME_duration
+      - sensor.rs_DOMAIN_NAME_last
+      - input_text.rs_DOMAIN_NAME_message
