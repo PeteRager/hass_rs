@@ -35,6 +35,8 @@ Supported methods:
 - fan.turn_on w/ percentage, fan.turn_off
 - climate.set_hvac_action, climate.set_temperature w/ temperature
 
+ If you need ither ones open an issue or better add it to the module_scripts.sh and open a pull request.
+
 # Setup and Usage
 
 You will need a linux shell, ability to edit scripts. Right now this is targeted for the power user.
