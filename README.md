@@ -67,6 +67,6 @@ change it to
 
 ```yaml
   - service: script.rs_thermostat_1_climate_set_temperature
-      data:
-        temperature: 70
+    data:
+      temperature: 70
 ```
