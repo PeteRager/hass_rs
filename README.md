@@ -67,7 +67,6 @@ change it to
 
 ```yaml
   - service: script.rs_thermostat_1_climate_set_temperature
-      continue_on_error: true
       data:
         temperature: 70
 ```
