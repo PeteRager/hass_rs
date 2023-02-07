@@ -37,17 +37,17 @@ Supported methods:
 
 # Setup and Usage
 
-You will need a linux shell, ability to edit script. Right now this is targeted for the power user.
+You will need a linux shell, ability to edit scripts. Right now this is targeted for the power user.
 
 You will need jq and yq installed.
 
 Copy the test.sh script and edit it to define your entities. Examples are in there for switch, fan and climate.
 
-Set the target directory for the output. I don't set this directly to HASS, but rather to a parallel directory so I can see what is generated before a I deploy it.
+Set the target directory for the output. I don't set this directly to HASS, but rather to a seperate directory so I can see what is generated before deploying it.
 
-When you run the scripts is will generate packages in the $TARGET/packages folder, scripts in the $TARGET/scripts folder and a lovelace dashboard in $TARGET/.storage
+When you run the scripts it will generate packages in the $TARGET/packages folder, scripts in the $TARGET/scripts folder and a lovelace dashboard in $TARGET/.storage
 
-To use the lovelace dashboard, first in HASS create a dashboard called services, go edit it and take control and then save it. This dashboard is automatically populated with your reliable service.
+To use the lovelace dashboard, first in HASS create a dashboard called services, go edit it and take control and then save it. This dashboard is automatically populated with your reliable service. Copy the generated dashboard into the .storage folder.
 
 Using in an automation.
 
