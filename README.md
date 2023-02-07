@@ -4,7 +4,7 @@ Service calls in Home Assistant don't always succeed the first time.
 
 This may occur when communicating with a wireless device (e.g. zwave) as the command may get lost due to RF interference. Or a cloud service that is temporarily unavailable due to an internet glitch. Regardless of the reason, the end result is the switch doesn't turn on, the light did not turn off, or the heat did not come on.
 
-The purpose of this repository is to provide a layer of reliable services that sit on-top of the home assistant services and will automatically retry and alert when the operations fail.
+The purpose of this repository is to provide a layer of reliable services that sit on-top of the home assistant services and will automatically retry and alert when the operations fail.  The primary use is from automations.
 
 # How does it work
 
