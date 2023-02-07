@@ -16,12 +16,14 @@ The wrapper
 - if it does not succeed a notification can be sent
 
 In addtion for each entity, it tracks the following information
-- numbee of calls
+- number of calls
 - number of retries
 - number of failures
 - datetime of last call
 - duration in ms of the call (wing to wing time - from service call to receiving the state update)
 - status text
+
+Generates a lovelace dashboard to visualize the aboe metrics
 
 # Current State
 
