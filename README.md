@@ -1,6 +1,4 @@
-# Overview
-
-Reliable Services for Home Assistant
+# Reliable Services for Home Assistant
 
 Service calls in Home Assistant don't always succeed the first time.
 
