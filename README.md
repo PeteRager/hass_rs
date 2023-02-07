@@ -16,9 +16,9 @@ The wrapper
 - if it does not succeed a notification can be sent
 
 In addtion for each entity, it tracks the following information
-- # of calls
-- # of retries
-- # of failures
+- numbee of calls
+- number of retries
+- number of failures
 - datetime of last call
 - duration in ms of the call (wing to wing time - from service call to receiving the state update)
 - status text
