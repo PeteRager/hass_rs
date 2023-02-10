@@ -10,27 +10,18 @@ The purpose of this repository is to provide a layer of reliable services that s
 
 # Current State
 
-The first iteration provide a shell script that will generate the reliable service stubs for the entities you identify. The end result is a set of packages and scripts than can be installed as part of your HASS configuration. Long term this will be converted into a custom integration, but for now the ability to quickly and extend by creating HASS scripts will be helpful as we work to understand the different patterns and nuances.
+This is the development branch for the python integration to handle reliable services. The code is currently in prototype mode. It does work on the happy path.
 
 Supported methods:
 
 - switch.turn_on, switch.turn_off
-- fan.turn_on w/ percentage, fan.turn_off
-- climate.set_hvac_action, climate.set_temperature w/ temperature
+- climate.set_hvac_action, climate.set_temperature
+
+The methods are defined in JSON, in the templates/methods.json file. Add new methods to this file.
 
 # Setup and Usage
 
-You will need a linux shell, ability to edit script. Right now this is targeted for the power user.
-
-You will need jq and yq installed.
-
-Copy the test.sh script and edit it to define your entities. Examples are in there for switch, fan and climate.
-
-Set the target directory for the output. I don't set this directly to HASS, but rather to a parallel directory so I can see what is generated before a I deploy it.
-
-When you run the scripts is will generate packages in the $TARGET/packages folder, scripts in the $TARGET/scripts folder and a lovelace dashboard in $TARGET/.storage
-
-To use the lovelace dashboard, first in HASS create a dashboard called services, go edit it and take control and then save it. This dashboard is automatically populated with your reliable service.
+Copy the rs directory into your custom_component folder.
 
 Using in an automation.
 
@@ -47,8 +38,9 @@ Let's say you have this:
 change it to
 
 ```yaml
-  - service: script.rs_thermostat_1_climate_set_temperature
-      continue_on_error: true
-      data:
-        temperature: 70
+- service: climate.rs_set_temperature
+  target:
+    entity_id: climate.thermostat_1
+  data:
+    temperature: 70
 ```
