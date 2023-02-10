@@ -1,0 +1,37 @@
+{
+    "switch" : {
+        "rs_turn_on": {
+            "target_method": "turn_on",
+            "conditions": {
+                "default" : "is_state('ENTITY_ID', 'on')"
+            },
+            "timeout": 5
+        },
+        "rs_turn_off": {
+            "target_method": "turn_off",
+            "conditions": {
+                "default" : "is_state('ENTITY_ID', 'off')"
+            },
+            "timeout": 5
+        }
+    },
+    "climate" : {
+        "rs_set_temperature" : {
+            "target_method": "set_temperature",
+            "conditions":  {
+                "default" : "state_attr('ENTITY_ID', 'temperature')|float == temperature|float",
+                "temperature" : "state_attr('ENTITY_ID', 'temperature')|float == temperature|float",
+                "hvac_mode" : "is_state('ENTITY_ID',hvac_mode)"
+            },
+            "timeout": 5
+        },
+        "rs_set_hvac_mode" : {
+            "target_method": "set_hvac_mode",
+            "conditions": {
+                "default" : "is_state('ENTITY_ID',hvac_mode)"
+            },
+            "timeout": 5
+        }
+
+    }
+}
