@@ -17,13 +17,12 @@ class RsMethod:
         self, hass: HomeAssistant, domain, method: str, data: dict[str, dict]
     ) -> None:
         """Init"""
-        self.hass = hass
+        self.hass: HomeAssistant = hass
         self.domain = domain
-        self.method = method
+        self.method: str = method
         self.target_method: str = data["target_method"]
         self.conditions: dict[str, str] = data["conditions"]
         self.timeout: int = data["timeout"]
-        self.data = data
 
     async def async_register(self):
         """Asumc register"""
@@ -40,10 +39,12 @@ class RsMethod:
             await self.hass.services.async_call(
                 self.domain.domain,
                 self.target_method,
-                service_data=service_data,
-                blocking=True,
+                service_data,
+                True,
             )
-            wait_list = await self._async_wait_template(call.data, self.timeout * retry)
+            wait_list = await self._async_wait_template(
+                service_data, self.timeout * retry
+            )
             if len(wait_list) == 0:
                 success = True
                 break

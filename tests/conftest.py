@@ -23,7 +23,7 @@ from pytest_homeassistant_custom_component.common import (
     async_mock_service,
 )
 
-6
+from custom_components.rs.rs_domain import RsDomain
 
 pytest_plugins = "pytest_homeassistant_custom_component"
 
@@ -68,3 +68,27 @@ def loadfile(name: str, sysId: str = None) -> json:
     if sysId is not None:
         data["SenderID"] = sysId
     return data
+
+
+@pytest.fixture
+def switch_json() -> dict:
+    return {
+        "switch": {
+            "rs_turn_on": {
+                "target_method": "turn_on",
+                "conditions": {"default": "is_state('ENTITY_ID', 'on')"},
+                "timeout": 5,
+            },
+            "rs_turn_off": {
+                "target_method": "turn_off",
+                "conditions": {"default": "is_state('ENTITY_ID', 'off')"},
+                "timeout": 5,
+            },
+        }
+    }
+
+
+@pytest.fixture
+def rs_domain_switch(hass, switch_json) -> RsDomain:
+    domain = RsDomain(hass, "switch", switch_json["switch"])
+    return domain
