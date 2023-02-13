@@ -89,6 +89,33 @@ def switch_json() -> dict:
 
 
 @pytest.fixture
+def climate_json() -> dict:
+    return {
+        "climate": {
+            "rs_set_temperature": {
+                "target_method": "set_temperature",
+                "conditions": {
+                    "temperature": "state_attr('ENTITY_ID', 'temperature')|float(0) == temperature|float",
+                    "hvac_mode": "is_state('ENTITY_ID',hvac_mode)",
+                },
+                "timeout": 5,
+            },
+            "rs_set_hvac_mode": {
+                "target_method": "set_hvac_mode",
+                "conditions": {"default": "is_state('ENTITY_ID',hvac_mode)"},
+                "timeout": 5,
+            },
+        }
+    }
+
+
+@pytest.fixture
 def rs_domain_switch(hass, switch_json) -> RsDomain:
     domain = RsDomain(hass, "switch", switch_json["switch"])
+    return domain
+
+
+@pytest.fixture
+def rs_domain_climate(hass, climate_json) -> RsDomain:
+    domain = RsDomain(hass, "climate", climate_json["climate"])
     return domain

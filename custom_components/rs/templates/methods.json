@@ -19,7 +19,6 @@
         "rs_set_temperature" : {
             "target_method": "set_temperature",
             "conditions":  {
-                "default" : "state_attr('ENTITY_ID', 'temperature')|float == temperature|float",
                 "temperature" : "state_attr('ENTITY_ID', 'temperature')|float == temperature|float",
                 "hvac_mode" : "is_state('ENTITY_ID',hvac_mode)"
             },
