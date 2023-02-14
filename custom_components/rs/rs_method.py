@@ -78,12 +78,7 @@ class RsMethod:
             template += fragments[i]
         return template
 
-    async def _async_wait_template(self, call_data: dict, timeout: int) -> list[str]:
-        variables: dict = {}
-        for _, (key, val) in enumerate(call_data.items()):
-            if key != "entity_id":
-                variables[key] = val
-
+    def _get_wait_list(self, call_data: dict, variables: dict) -> list[str]:
         wait_list = []
         for entity_id in call_data["entity_id"]:
             template = "{{" + self._build_template_fragment(entity_id, call_data) + "}}"
@@ -91,10 +86,21 @@ class RsMethod:
             # check if condition already okay
             if async_template(self.hass, wait_template, variables, False) is False:
                 wait_list.append(entity_id)
+        return wait_list
 
+    async def _async_wait_template(self, call_data: dict, timeout: int) -> list[str]:
+        # Put all the call parameters into variables so they can be used in the condition template
+        variables: dict = {}
+        for _, (key, val) in enumerate(call_data.items()):
+            if key != "entity_id":
+                variables[key] = val
+
+        # Get the list of entities whose conditions that are not true that we will wait for
+        wait_list = self._get_wait_list(call_data, variables)
         if len(wait_list) == 0:
             return []
 
+        # Build one big template for all the entity ids in the call.
         template = "{{"
         for index, entity_id in enumerate(wait_list):
             if index != 0:
@@ -108,34 +114,27 @@ class RsMethod:
             """Handle script after template condition is true."""
             done.set()
 
-        completed = True
         done = asyncio.Event()
         unsub = async_track_template(
             self.hass, wait_template, async_script_wait, variables=variables
         )
 
-        tasks = [self.hass.async_create_task(done.wait())]
+        timed_out = False
+
+        task = self.hass.async_create_task(done.wait())
         try:
             async with async_timeout.timeout(timeout) as _:
-                await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+                await task
         except asyncio.TimeoutError as _:
-            completed = False
+            timed_out = True
         finally:
-            for task in tasks:
-                task.cancel()
+            task.cancel()
             unsub()
 
-        if completed is False:
+        if timed_out is True:
+            # Determine which entities in the list did not complete and return that list
+            # If there was only 1 item to start with, it's still there are we can just return
             if len(wait_list) == 1:
                 return wait_list
-            wait_list = []
-            for entity_id in call_data["entity_id"]:
-                template = (
-                    "{{" + self._build_template_fragment(entity_id, call_data) + "}}"
-                )
-                wait_template = Template(template, self.hass)
-                # check if condition already okay
-                if async_template(self.hass, wait_template, variables, False) is False:
-                    wait_list.append(entity_id)
-            return wait_list
+            return self._get_wait_list(call_data, variables)
         return []
