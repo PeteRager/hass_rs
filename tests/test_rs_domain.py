@@ -11,7 +11,7 @@ from custom_components.rs.rs_domain import RsDomain
 
 
 @pytest.mark.asyncio
-async def test_rs_domain(hass, caplog):
+async def test_rs_domain(hass):
     methods = {
         "rs_set_temperature": {
             "target_method": "set_temperature",

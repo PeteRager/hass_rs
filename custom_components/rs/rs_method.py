@@ -1,4 +1,6 @@
 """Rs entity"""
+# pylint: disable=line-too-long
+
 import asyncio
 import logging
 
@@ -16,9 +18,7 @@ _LOGGER = logging.getLogger(__name__)
 class RsMethod:
     """Reliable switch"""
 
-    def __init__(
-        self, hass: HomeAssistant, domain, method: str, data: dict[str, dict]
-    ) -> None:
+    def __init__(self, hass: HomeAssistant, domain, method: str, data: dict[str, dict]) -> None:
         """Init"""
         self.hass: HomeAssistant = hass
         self.domain = domain
@@ -32,8 +32,8 @@ class RsMethod:
         self.hass.services.async_register(self.domain.domain, self.method, self.execute)
 
     async def execute(self, call: ServiceCall):
-        _LOGGER.info("execute %s:%s %s", self.domain.domain, self.method, call.data)
         """Handle the service call."""
+        _LOGGER.info("execute %s:%s %s", self.domain.domain, self.method, call.data)
         success: bool = False
         retry: int = 0
         wait_list: list[str] = call.data.copy()["entity_id"]
@@ -46,9 +46,7 @@ class RsMethod:
                 service_data,
                 True,
             )
-            wait_list = await self._async_wait_template(
-                service_data, self.timeout * (retry + 1)
-            )
+            wait_list = await self._async_wait_template(service_data, self.timeout * (retry + 1))
             if len(wait_list) == 0:
                 success = True
                 break
@@ -72,7 +70,7 @@ class RsMethod:
                 fragments.append(val.replace("ENTITY_ID", entity_id))
 
         template = ""
-        for i in range(0, len(fragments)):
+        for i in range(0, len(fragments)):  # pylint: disable=consider-using-enumerate
             if i != 0:
                 template += " and "
             template += fragments[i]
@@ -110,14 +108,12 @@ class RsMethod:
         wait_template = Template(template, self.hass)
 
         @callback
-        def async_script_wait(entity_id, from_s, to_s):
+        def async_script_wait(entity_id, from_s, to_s):  # pylint: disable=unused-argument
             """Handle script after template condition is true."""
             done.set()
 
         done = asyncio.Event()
-        unsub = async_track_template(
-            self.hass, wait_template, async_script_wait, variables=variables
-        )
+        unsub = async_track_template(self.hass, wait_template, async_script_wait, variables=variables)
 
         timed_out = False
 

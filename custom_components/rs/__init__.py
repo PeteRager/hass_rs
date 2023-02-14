@@ -3,9 +3,10 @@ import json
 import pkgutil
 
 import voluptuous as vol
-from .rs_domain import RsDomain
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import config_validation as cv
+
+from .rs_domain import RsDomain
 
 DOMAIN = "rs"
 
