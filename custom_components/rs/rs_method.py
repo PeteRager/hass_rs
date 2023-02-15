@@ -3,6 +3,7 @@
 
 import asyncio
 import logging
+import time
 
 import async_timeout
 
@@ -12,7 +13,49 @@ from homeassistant.helpers.template import Template
 from homeassistant.helpers.condition import async_template
 from homeassistant.helpers.event import async_track_template
 
+from .const import (
+    RS_MESSAGE_CALL_ATTEMPT,
+    RS_MESSAGE_CALL_FAILED,
+    RS_MESSAGE_CALL_SUCCESS,
+    RS_METHOD_EVENT,
+    RS_METHOD_MESSAGE,
+)
+
 _LOGGER = logging.getLogger(__name__)
+
+
+class RsMethodCallCounters:
+    """Class to track method call counters"""
+
+    def __init__(self) -> None:
+        self.start_time: float = time.time()
+        self.retry: int = 0
+        self.is_failed: bool = False
+        self.end_time: float = None
+
+    def inc_retry(self) -> None:
+        """Increment retry"""
+        self.retry += 1
+
+    @property
+    def is_done(self) -> bool:
+        """Is method call complete"""
+        return self.end_time is not None
+
+    def done(self) -> None:
+        """Mark as complete"""
+        self.end_time = time.time()
+
+    def failed(self) -> None:
+        """Mark failed"""
+        self.is_failed = True
+
+    @property
+    def duration_ms(self) -> int:
+        """Return the duration"""
+        if self.end_time is None:
+            raise ValueError("End Time is none")
+        return round((self.end_time - self.start_time) * 1000, 0)
 
 
 class RsMethod:
@@ -37,9 +80,21 @@ class RsMethod:
         success: bool = False
         retry: int = 0
         wait_list: list[str] = call.data.copy()["entity_id"]
+        call_counters: dict[str, RsMethodCallCounters] = {}
+        for entity_id in wait_list:
+            call_counters[entity_id] = RsMethodCallCounters()
         while retry < 3:
+            if retry > 0:
+                _LOGGER.warning(
+                    "Retrying service call [%d] [%s] call-entities %s wait-entities %s",
+                    retry,
+                    self.method,
+                    call.data["entity_id"],
+                    wait_list,
+                )
             service_data = call.data.copy()
             service_data["entity_id"] = wait_list
+            self._publish_call_attempt(call, wait_list, retry)
             await self.hass.services.async_call(
                 self.domain.domain,
                 self.target_method,
@@ -47,17 +102,24 @@ class RsMethod:
                 True,
             )
             wait_list = await self._async_wait_template(service_data, self.timeout * (retry + 1))
+            for _, (entity_id, call_counter) in enumerate(call_counters.items()):
+                if entity_id in wait_list:
+                    call_counter.inc_retry()
+                elif call_counter.is_done is False:
+                    call_counter.done()
+                    self._publish_call_success(call, entity_id)
+
             if len(wait_list) == 0:
                 success = True
                 break
             retry += 1
-            _LOGGER.warning(
-                "Retrying service call [%d] [%s] call-entities %s wait-entities %s",
-                retry,
-                self.method,
-                call.data["entity_id"],
-                wait_list,
-            )
+        for _, (entity_id, call_counter) in enumerate(call_counters.items()):
+            if call_counter.is_done is False:
+                call_counter.done()
+                call_counter.failed()
+                self._publish_call_failed(call, entity_id)
+
+        self._publish_events(call_counters)
         if success is False:
             raise HomeAssistantError(
                 f'Service call failed [{self.method}] call-entities {call.data["entity_id"]} failed-entities {wait_list}'
@@ -134,3 +196,44 @@ class RsMethod:
                 return wait_list
             return self._get_wait_list(call_data, variables)
         return []
+
+    def _publish_events(self, call_counters: dict[str, RsMethodCallCounters]):
+        for _, (entity_id, counter) in enumerate(call_counters.items()):
+            event = {
+                "rs_method": self.method,
+                "target_method": self.target_method,
+                "entity_id": entity_id,
+                "start_time": counter.start_time,
+                "end_time": counter.end_time,
+                "duration_ms": counter.duration_ms,
+                "retry": counter.retry,
+                "failed": counter.is_failed,
+            }
+            self.hass.bus.async_fire(RS_METHOD_EVENT, event)
+
+    def _publish_call_attempt(self, call: ServiceCall, entity_list: list[str], retry: int):
+        message = f"{RS_MESSAGE_CALL_ATTEMPT} {retry+1}"
+        for entity_id in entity_list:
+            self._publish_message(call, entity_id, message)
+
+    def _publish_call_success(self, call: ServiceCall, entity_id: str):
+        self._publish_message(call, entity_id, RS_MESSAGE_CALL_SUCCESS)
+
+    def _publish_call_failed(self, call: ServiceCall, entity_id: str):
+        self._publish_message(call, entity_id, RS_MESSAGE_CALL_FAILED)
+
+    def _publish_message(self, call: ServiceCall, entity_id: str, message: str):
+        parameters: str = ""
+        for _, (parameter, val) in enumerate(call.data.items()):
+            if parameter != "entity_id":
+                if len(parameters) > 0:
+                    parameters = parameters + " "
+                parameters = parameters + str(val)
+        event = {
+            "rs_method": self.method,
+            "target_method": self.target_method,
+            "entity_id": entity_id,
+            "message": message,
+            "parameters": parameters,
+        }
+        self.hass.bus.async_fire(RS_METHOD_MESSAGE, event)
