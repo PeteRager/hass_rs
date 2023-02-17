@@ -11,7 +11,7 @@ from unittest.mock import patch
 import pytest
 
 from homeassistant.core import HomeAssistant, ServiceCall
-from homeassistant.exceptions import HomeAssistantError
+from homeassistant.exceptions import HomeAssistantError, ConditionErrorMessage
 from homeassistant.helpers.template import Template
 
 from custom_components.rs.rs_domain import RsDomain
@@ -68,11 +68,12 @@ async def test_rs_method_execute(hass: HomeAssistant, rs_domain_switch: RsDomain
                         assert call_data["entity_id"][0] == "switch.switch_1"
 
                         assert _async_wait_template.call_count == 1
-                        call_data = _async_wait_template.mock_calls[0].args[0]
+                        wait_list = _async_wait_template.mock_calls[0].args[0]
+                        call_data = _async_wait_template.mock_calls[0].args[1]
                         assert len(call_data) == 1
                         assert len(call_data["entity_id"]) == 1
                         assert call_data["entity_id"][0] == "switch.switch_1"
-                        assert _async_wait_template.mock_calls[0].args[1] == 5
+                        assert _async_wait_template.mock_calls[0].args[2] == 5
 
                         assert len(caplog.messages) == 1
                         assert str(call_data) in caplog.messages[0]
@@ -127,18 +128,18 @@ async def test_rs_method_execute(hass: HomeAssistant, rs_domain_switch: RsDomain
                         assert call_data["entity_id"][0] == "switch.switch_1"
 
                         assert _async_wait_template.call_count == 2
-                        call_data = _async_wait_template.mock_calls[0].args[0]
+                        call_data = _async_wait_template.mock_calls[0].args[1]
                         assert len(call_data) == 1
                         assert len(call_data["entity_id"]) == 2
                         assert call_data["entity_id"][0] == "switch.switch_1"
                         assert call_data["entity_id"][1] == "switch.switch_2"
-                        assert _async_wait_template.mock_calls[0].args[1] == 5
+                        assert _async_wait_template.mock_calls[0].args[2] == 5
 
-                        call_data = _async_wait_template.mock_calls[1].args[0]
+                        call_data = _async_wait_template.mock_calls[1].args[1]
                         assert len(call_data) == 1
                         assert len(call_data["entity_id"]) == 1
                         assert call_data["entity_id"][0] == "switch.switch_1"
-                        assert _async_wait_template.mock_calls[1].args[1] == 10
+                        assert _async_wait_template.mock_calls[1].args[2] == 10
 
                         assert len(caplog.messages) == 1
                         assert "rs_turn_on" in caplog.messages[0]
@@ -236,6 +237,79 @@ async def test_rs_method_execute(hass: HomeAssistant, rs_domain_switch: RsDomain
                     assert _publish_message.mock_calls[5].args[1] == "switch.switch_1"
                     assert _publish_message.mock_calls[5].args[2] == "failed"
 
+    with patch.object(hass.services, "async_call") as async_call:
+        with caplog.at_level(logging.ERROR):
+            caplog.clear()
+            with patch.object(method, "_async_wait_template") as _async_wait_template:
+                with patch.object(method, "_publish_events") as _publish_events:
+                    with patch.object(method, "_publish_message") as _publish_message:
+                        async_call.side_effect = HomeAssistantError("Service failed to execute")
+                        _async_wait_template.return_value = ["switch.switch_1"]
+                        with pytest.raises(HomeAssistantError) as hae:
+                            await method.execute(call)
+                            assert async_call.call_count == 3
+                            assert _async_wait_template.call_count == 3
+                        s = str(hae.value)
+                        assert "Service call failed [rs_turn_on]" in s
+                        assert "call-entities ['switch.switch_1', 'switch.switch_2']" in s
+                        assert "failed-entities ['switch.switch_1', 'switch.switch_2']" in s
+
+                        assert len(caplog.records) == 3
+                        assert "rs_turn_on" in caplog.messages[0]
+                        assert "switch.switch_1" in caplog.messages[0]
+                        assert "switch.switch_2" in caplog.messages[0]
+                        assert "rs_turn_on" in caplog.messages[0]
+                        assert "Service failed to execute" in caplog.messages[0]
+
+                        _publish_events.assert_called_once()
+                        assert len(_publish_events.mock_calls[0].args) == 1
+                        call_counters: dict[str, RsMethodCallCounters] = _publish_events.mock_calls[0].args[0]
+                        assert len(call_counters) == 2
+                        assert call_counters["switch.switch_1"].retry == 3
+                        assert call_counters["switch.switch_1"].errors == 3
+                        assert call_counters["switch.switch_1"].is_failed is True
+                        assert call_counters["switch.switch_1"].is_done is True
+                        assert call_counters["switch.switch_1"].duration_ms < 100
+
+                        assert call_counters["switch.switch_2"].retry == 3
+                        assert call_counters["switch.switch_1"].errors == 3
+                        assert call_counters["switch.switch_2"].is_failed is True
+                        assert call_counters["switch.switch_2"].is_done is True
+                        assert call_counters["switch.switch_2"].duration_ms < 100
+
+                        assert _publish_message.call_count == 8
+                        assert _publish_message.mock_calls[0].args[0] is call
+                        assert _publish_message.mock_calls[0].args[1] == "switch.switch_1"
+                        assert _publish_message.mock_calls[0].args[2] == "attempt 1"
+
+                        assert _publish_message.mock_calls[1].args[0] is call
+                        assert _publish_message.mock_calls[1].args[1] == "switch.switch_2"
+                        assert _publish_message.mock_calls[1].args[2] == "attempt 1"
+
+                        assert _publish_message.mock_calls[2].args[0] is call
+                        assert _publish_message.mock_calls[2].args[1] == "switch.switch_1"
+                        assert _publish_message.mock_calls[2].args[2] == "attempt 2"
+
+                        assert _publish_message.mock_calls[3].args[0] is call
+                        assert _publish_message.mock_calls[3].args[1] == "switch.switch_2"
+                        assert _publish_message.mock_calls[3].args[2] == "attempt 2"
+
+                        assert _publish_message.mock_calls[4].args[0] is call
+                        assert _publish_message.mock_calls[4].args[1] == "switch.switch_1"
+                        assert _publish_message.mock_calls[4].args[2] == "attempt 3"
+
+                        assert _publish_message.mock_calls[5].args[0] is call
+                        assert _publish_message.mock_calls[5].args[1] == "switch.switch_2"
+                        assert _publish_message.mock_calls[5].args[2] == "attempt 3"
+
+                        assert _publish_message.mock_calls[6].args[0] is call
+                        assert _publish_message.mock_calls[6].args[1] == "switch.switch_1"
+                        assert _publish_message.mock_calls[6].args[2] == "failed"
+
+                        assert _publish_message.mock_calls[7].args[0] is call
+                        assert _publish_message.mock_calls[7].args[1] == "switch.switch_2"
+                        assert _publish_message.mock_calls[7].args[2] == "failed"
+
 
 @pytest.mark.asyncio
 async def test_rs_method_async_wait_template(hass: HomeAssistant, rs_domain_climate: RsDomain):
@@ -246,12 +320,13 @@ async def test_rs_method_async_wait_template(hass: HomeAssistant, rs_domain_clim
         "temperature": 70,
     }
     call = ServiceCall("climate", "set_temperature", call_data, None)
+    wait_list = ["climate.thermo_1", "climate.thermo_2"]
 
     with patch("custom_components.rs.rs_method.async_track_template") as async_track_template:
         with patch("custom_components.rs.rs_method.async_template") as async_template:
             async_template.return_value = True
-            wait_list = await method._async_wait_template(call.data, 5)
-            assert len(wait_list) == 0
+            new_wait_list = await method._async_wait_template(wait_list, call.data, 5)
+            assert len(new_wait_list) == 0
             assert async_template.call_count == 2
 
             assert async_track_template.assert_not_called
@@ -287,8 +362,8 @@ async def test_rs_method_async_wait_template(hass: HomeAssistant, rs_domain_clim
     with patch("custom_components.rs.rs_method.async_track_template") as async_track_template:
         with patch("custom_components.rs.rs_method.async_template") as async_template:
             async_template.return_value = True
-            wait_list = await method._async_wait_template(call.data, 5)
-            assert len(wait_list) == 0
+            new_wait_list = await method._async_wait_template(wait_list, call.data, 5)
+            assert len(new_wait_list) == 0
             assert async_template.call_count == 2
 
             assert len(async_template.mock_calls[0].args) == 4
@@ -316,6 +391,13 @@ async def test_rs_method_async_wait_template(hass: HomeAssistant, rs_domain_clim
             assert variables["temperature"] == 70
             assert variables["hvac_mode"] == "heat"
             assert async_template.mock_calls[1].args[3] is False
+
+    # Test having an unparsable template
+    call = ServiceCall("climate", "set_temperature", call_data, None)
+    method.conditions["temperature"] = "### bad template }}} {{{{}}}}"
+    with patch("custom_components.rs.rs_method.async_track_template") as async_track_template:
+        with pytest.raises(ConditionErrorMessage):
+            new_wait_list = await method._async_wait_template(wait_list, call.data, 5)
 
 
 class TemplateMock:
@@ -349,6 +431,7 @@ async def test_rs_method_async_wait_template_1(hass: HomeAssistant, rs_domain_cl
         "temperature": 70,
         "hvac_mode": "heat",
     }
+    wait_list = ["climate.thermo_1", "climate.thermo_2"]
     call = ServiceCall("climate", "set_temperature", call_data, None)
 
     mock = TemplateMock(False)
@@ -361,7 +444,7 @@ async def test_rs_method_async_wait_template_1(hass: HomeAssistant, rs_domain_cl
             "custom_components.rs.rs_method.async_template",
         ) as async_template:
             async_template.return_value = False
-            res = await hass.async_create_task(method._async_wait_template(call.data, 5))
+            res = await hass.async_create_task(method._async_wait_template(wait_list, call.data, 5))
             assert mock.my_async_track_template_count == 1
             assert mock.my_unsub_count == 1
             assert (
@@ -379,7 +462,7 @@ async def test_rs_method_async_wait_template_1(hass: HomeAssistant, rs_domain_cl
             "custom_components.rs.rs_method.async_template",
         ) as async_template:
             async_template.side_effect = [True, False]
-            res = await hass.async_create_task(method._async_wait_template(call.data, 5))
+            res = await hass.async_create_task(method._async_wait_template(wait_list, call.data, 5))
             assert mock.my_async_track_template_count == 1
             assert mock.my_unsub_count == 1
             assert (
@@ -397,7 +480,7 @@ async def test_rs_method_async_wait_template_1(hass: HomeAssistant, rs_domain_cl
             "custom_components.rs.rs_method.async_template",
         ) as async_template:
             async_template.side_effect = [True, False]
-            res = await hass.async_create_task(method._async_wait_template(call.data, 1))
+            res = await hass.async_create_task(method._async_wait_template(wait_list, call.data, 1))
             assert mock.my_async_track_template_count == 1
             assert mock.my_unsub_count == 1
             assert (
@@ -416,7 +499,7 @@ async def test_rs_method_async_wait_template_1(hass: HomeAssistant, rs_domain_cl
             "custom_components.rs.rs_method.async_template",
         ) as async_template:
             async_template.side_effect = [False, False, False, False]
-            res = await hass.async_create_task(method._async_wait_template(call.data, 1))
+            res = await hass.async_create_task(method._async_wait_template(wait_list, call.data, 1))
             assert async_template.call_count == 4
             assert async_template.mock_calls[3]
             assert mock.my_async_track_template_count == 1
@@ -464,7 +547,7 @@ async def test_rs_method_async_wait_template_1(hass: HomeAssistant, rs_domain_cl
             "custom_components.rs.rs_method.async_template",
         ) as async_template:
             async_template.side_effect = [False, False, False, True]
-            res = await hass.async_create_task(method._async_wait_template(call.data, 1))
+            res = await hass.async_create_task(method._async_wait_template(wait_list, call.data, 1))
             assert async_template.call_count == 4
             assert async_template.mock_calls[3]
             assert mock.my_async_track_template_count == 1

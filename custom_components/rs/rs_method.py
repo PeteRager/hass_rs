@@ -30,12 +30,17 @@ class RsMethodCallCounters:
     def __init__(self) -> None:
         self.start_time: float = time.time()
         self.retry: int = 0
+        self.errors: int = 0
         self.is_failed: bool = False
         self.end_time: float = None
 
     def inc_retry(self) -> None:
         """Increment retry"""
         self.retry += 1
+
+    def inc_errors(self) -> None:
+        """Increment retry"""
+        self.errors += 1
 
     @property
     def is_done(self) -> bool:
@@ -95,19 +100,15 @@ class RsMethod:
             service_data = call.data.copy()
             service_data["entity_id"] = wait_list
             self._publish_call_attempt(call, wait_list, retry)
-            await self.hass.services.async_call(
-                self.domain.domain,
-                self.target_method,
-                service_data,
-                True,
-            )
-            wait_list = await self._async_wait_template(service_data, self.timeout * (retry + 1))
-            for _, (entity_id, call_counter) in enumerate(call_counters.items()):
-                if entity_id in wait_list:
-                    call_counter.inc_retry()
-                elif call_counter.is_done is False:
-                    call_counter.done()
-                    self._publish_call_success(call, entity_id)
+            try:
+                await self.hass.services.async_call(self.domain.domain, self.target_method, service_data, True)
+                wait_list = await self._async_wait_template(wait_list, service_data, self.timeout * (retry + 1))
+            except Exception as ex:  # pylint: disable=broad-except
+                # Right now if we get an error we will retry anyways
+                _LOGGER.error("execute %s:%s %s error: %s", self.domain.domain, self.method, call.data, ex)
+                self._wait_list_inc_errors(call_counters, wait_list)
+
+            self._update_call_counters_after_wait(call, call_counters, wait_list)
 
             if len(wait_list) == 0:
                 success = True
@@ -125,6 +126,20 @@ class RsMethod:
                 f'Service call failed [{self.method}] call-entities {call.data["entity_id"]} failed-entities {wait_list}'
             )
 
+    def _wait_list_inc_errors(self, call_counters: dict[str, RsMethodCallCounters], wait_list: list[str]) -> None:
+        for entity_id in wait_list:
+            call_counters[entity_id].inc_errors()
+
+    def _update_call_counters_after_wait(
+        self, call: ServiceCall, call_counters: dict[str, RsMethodCallCounters], wait_list: list[str]
+    ) -> None:
+        for _, (entity_id, call_counter) in enumerate(call_counters.items()):
+            if entity_id in wait_list:
+                call_counter.inc_retry()
+            elif call_counter.is_done is False:
+                call_counter.done()
+                self._publish_call_success(call, entity_id)
+
     def _build_template_fragment(self, entity_id: str, call_data) -> str:
         fragments = []
         for _, (par, val) in enumerate(self.conditions.items()):
@@ -138,17 +153,28 @@ class RsMethod:
             template += fragments[i]
         return template
 
-    def _get_wait_list(self, call_data: dict, variables: dict) -> list[str]:
-        wait_list = []
-        for entity_id in call_data["entity_id"]:
+    def _create_wait_list_template(self, wait_list: list[str], call_data) -> str:
+        template = "{{"
+        for index, entity_id in enumerate(wait_list):
+            if index != 0:
+                template += " and "
+            template += self._build_template_fragment(entity_id, call_data)
+        template += "}}"
+        return template
+
+    def _get_wait_list(self, wait_list: list[str], call_data: dict, variables: dict) -> list[str]:
+        new_wait_list: list[str] = []
+        for entity_id in wait_list:
             template = "{{" + self._build_template_fragment(entity_id, call_data) + "}}"
+            _LOGGER.debug("_get_wait_list entity %s template %s", entity_id, template)
             wait_template = Template(template, self.hass)
             # check if condition already okay
             if async_template(self.hass, wait_template, variables, False) is False:
-                wait_list.append(entity_id)
-        return wait_list
+                new_wait_list.append(entity_id)
+        _LOGGER.debug("_get_wait_list returning new_wait_list %s", new_wait_list)
+        return new_wait_list
 
-    async def _async_wait_template(self, call_data: dict, timeout: int) -> list[str]:
+    async def _async_wait_template(self, wait_list: list[str], call_data: dict, timeout: int) -> list[str]:
         # Put all the call parameters into variables so they can be used in the condition template
         variables: dict = {}
         for _, (key, val) in enumerate(call_data.items()):
@@ -156,18 +182,14 @@ class RsMethod:
                 variables[key] = val
 
         # Get the list of entities whose conditions that are not true that we will wait for
-        wait_list = self._get_wait_list(call_data, variables)
+        wait_list = self._get_wait_list(wait_list, call_data, variables)
         if len(wait_list) == 0:
             return []
 
         # Build one big template for all the entity ids in the call.
-        template = "{{"
-        for index, entity_id in enumerate(wait_list):
-            if index != 0:
-                template += " and "
-            template += self._build_template_fragment(entity_id, call_data)
-        template += "}}"
+        template = self._create_wait_list_template(wait_list, call_data)
         wait_template = Template(template, self.hass)
+        _LOGGER.debug("_async_wait_template wait_template [%s]", wait_template)
 
         @callback
         def async_script_wait(entity_id, from_s, to_s):  # pylint: disable=unused-argument
@@ -175,26 +197,24 @@ class RsMethod:
             done.set()
 
         done = asyncio.Event()
-        unsub = async_track_template(self.hass, wait_template, async_script_wait, variables=variables)
-
         timed_out = False
 
+        unsub = async_track_template(self.hass, wait_template, async_script_wait, variables=variables)
         task = self.hass.async_create_task(done.wait())
         try:
             async with async_timeout.timeout(timeout) as _:
                 await task
         except asyncio.TimeoutError as _:
             timed_out = True
-        finally:
-            task.cancel()
-            unsub()
+        task.cancel()
+        unsub()
 
         if timed_out is True:
             # Determine which entities in the list did not complete and return that list
             # If there was only 1 item to start with, it's still there are we can just return
             if len(wait_list) == 1:
                 return wait_list
-            return self._get_wait_list(call_data, variables)
+            return self._get_wait_list(wait_list, call_data, variables)
         return []
 
     def _publish_events(self, call_counters: dict[str, RsMethodCallCounters]):
@@ -209,6 +229,7 @@ class RsMethod:
                 "retry": counter.retry,
                 "failed": counter.is_failed,
             }
+            _LOGGER.debug("_publish_events event %s", event)
             self.hass.bus.async_fire(RS_METHOD_EVENT, event)
 
     def _publish_call_attempt(self, call: ServiceCall, entity_list: list[str], retry: int):
@@ -236,4 +257,5 @@ class RsMethod:
             "message": message,
             "parameters": parameters,
         }
+        _LOGGER.debug("_publish_message event %s", event)
         self.hass.bus.async_fire(RS_METHOD_MESSAGE, event)
